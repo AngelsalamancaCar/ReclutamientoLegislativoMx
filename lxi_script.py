@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 import logging
 import polars as pl
 import os
+import re
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -133,14 +134,34 @@ TIPO_ACTIVIDAD_MAPPING = {
 
 # ==================== UTILIDADES ====================
 
-def normalizar_expresiones_pl(col: pl.Expr) -> pl.Expr:
-    """Normaliza strings en español: remueve acentos y caracteres especiales"""
-    return (
-        col.str.normalize("NFD")
-        .str.replace_all(r"\p{Mn}", "")
-        .str.replace_all(r"[^\p{L}\s]", "")
-        .str.replace_all(r"\s+", " ")
-        .str.strip()
+def normalizar_texto(texto):
+    """Función auxiliar para normalizar texto en Python puro."""
+    if not isinstance(texto, str):
+        return texto
+    
+    texto = texto.strip()
+    texto = re.sub(r"\s+", " ", texto)
+    texto = texto.lower()
+    texto = re.sub(r"[^\w\sáéíóúñüÁÉÍÓÚÑÜ]", "", texto)
+    
+    # Normalizar caracteres acentuados
+    texto = texto.replace("á", "a")
+    texto = texto.replace("é", "e")
+    texto = texto.replace("í", "i")
+    texto = texto.replace("ó", "o")
+    texto = texto.replace("ú", "u")
+    texto = texto.replace("ñ", "n")
+    texto = texto.replace("ü", "u")
+    
+    return texto
+
+def normalizar_expresiones_pl(expr):
+    """
+    Función helper para aplicar normalizaciones de texto usando Polars expressions.
+    """
+    return expr.map_elements(
+        lambda x: normalizar_texto(x) if isinstance(x, str) else x,
+        return_dtype=pl.String
     )
 
 
