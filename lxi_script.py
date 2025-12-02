@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import logging
 import polars as pl
+import os
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -28,8 +29,8 @@ class PipelineConfig:
     def default(cls):
         """Configuración por defecto con paths relativos"""
         return cls(
-            input_file=Path("data/raw/LXI.xlsx"),
-            output_file=Path("data/processed/LXI_processed.parquet"),
+            input_file=Path(r"C:\Users\zigma\Projects\CongresoProject\data\raw\LXI.xlsx"),
+            output_file=Path(r"C:\Users\zigma\Projects\CongresoProject\data\processed\LXI_processed.parquet"),
             partido_mapping=PARTIDO_MAPPING  # Usar constante definida abajo
         )
 
@@ -46,9 +47,12 @@ LEGISLATURA_MAPPING = {
 }
 
 TIPO_ELECCION_MAPPING = {
-    "Mayoría Relativa": "mr",
-    "Representación Proporcional": "rp",
+    "Mayoria Relativa": "mr",
+    "Mayoría Relativa": "mr",  # Con acento
+    "Representacion Proporcional": "rp",
+    "Representación Proporcional": "rp",  # Con acento
 }
+
 
 PARTIDO_MAPPING = {
     "PRI01": "PRI",
@@ -100,34 +104,39 @@ ENTIDAD_MAPPING = {
 
 TIPO_COMITE_MAPPING = {
     "ORDINARIA": "ordinaria",
-    "COMITÉ": "comite",
+    "COMITE": "comite",
+    "COMITÉ": "comite",  # Con acento
     "ESPECIAL": "especial",
     "BICAMARAL": "bicamaral",
 }
 
 TIPO_ACTIVIDAD_MAPPING = {
     "ESCOLARIDAD": "escolaridad",
-    "TRAYECTORIA POLÍTICA": "exp_politica",
+    "TRAYECTORIA POLITICA": "exp_politica",
+    "TRAYECTORIA POLÍTICA": "exp_politica",  # Con acento
     "INICIATIVA PRIVADA": "exp_laboral_privada",
     "EXPERIENCIA LEGISLATIVA": "exp_leg_previa",
-    "ADMINISTRACIÓN PÚBLICA FEDERAL": "exp_apf",
-    "ADMINISTRACIÓN PÚBLICA LOCAL": "exp_aplocal",
+    "ADMINISTRACION PUBLICA FEDERAL": "exp_apf",
+    "ADMINISTRACIÓN PÚBLICA FEDERAL": "exp_apf",  # Con acento
+    "ADMINISTRACION PUBLICA LOCAL": "exp_aplocal",
+    "ADMINISTRACIÓN PÚBLICA LOCAL": "exp_aplocal",  # Con acento
     "CARGOS EN LEGISLATURAS LOCALES O FEDERALES": "cargos_legislativos_previa",
-    "CARGOS DE ELECCIÓN POPULAR": "cargos_electos_previos",
+    "CARGOS DE ELECCION POPULAR": "cargos_electos_previos",
+    "CARGOS DE ELECCIÓN POPULAR": "cargos_electos_previos",  # Con acento
     "ASOCIACIONES A LAS QUE PERTENECE": "exp_asociaciones",
     "ACTIVIDADES DOCENTES": "exp_docente",
     "PUBLICACIONES": "publicaciones",
     "Actividad Empresarial": "exp_empresarial",
-    "LOGROS DEPORTIVOS MÁS DESTACADOS": "logros_deportivos",
+    "LOGROS DEPORTIVOS MAS DESTACADOS": "logros_deportivos",
+    "LOGROS DEPORTIVOS MÁS DESTACADOS": "logros_deportivos",  # Con acento
 }
-
 
 # ==================== UTILIDADES ====================
 
 def normalizar_expresiones_pl(col: pl.Expr) -> pl.Expr:
     """Normaliza strings en español: remueve acentos y caracteres especiales"""
     return (
-        col.str.normalize("nfd")
+        col.str.normalize("NFD")
         .str.replace_all(r"\p{Mn}", "")
         .str.replace_all(r"[^\p{L}\s]", "")
         .str.replace_all(r"\s+", " ")
@@ -169,16 +178,16 @@ def process_sheet1(df: pl.DataFrame, partido_mapping: Dict[str, str]) -> pl.Data
         return df
     
     return df.with_columns([
-        pl.col("partido_diputado").replace(partido_mapping, default=pl.col("partido_diputado")),
-        pl.col("tipo_eleccion").replace(TIPO_ELECCION_MAPPING, default=pl.col("tipo_eleccion")),
-        pl.col("entidad").replace(ENTIDAD_MAPPING, default=pl.col("entidad")),
+        pl.col("partido_diputado").replace_strict(partido_mapping, default=pl.col("partido_diputado")),
+        pl.col("tipo_eleccion").replace_strict(TIPO_ELECCION_MAPPING, default=pl.col("tipo_eleccion")),
+        pl.col("entidad").replace_strict(ENTIDAD_MAPPING, default=pl.col("entidad")),
         pl.col("fecha_nacimiento")
             .str.strptime(pl.Date, format="%d-%m-%Y", strict=False)
             .alias("fecha_nacimiento"),
         normalizar_expresiones_pl(pl.col("nombre_completo")).alias("nombre_completo"),
         normalizar_expresiones_pl(pl.col("suplente")).alias("suplente"),
         normalizar_expresiones_pl(pl.col("cabecera")).alias("cabecera"),
-        pl.col("legislatura_activo").replace(LEGISLATURA_MAPPING, default=pl.col("legislatura_activo")),
+        pl.col("legislatura_activo").replace_strict(LEGISLATURA_MAPPING, default=pl.col("legislatura_activo")),
     ])
 
 
@@ -196,7 +205,7 @@ def process_sheet2(df: pl.DataFrame) -> pl.DataFrame:
     df = df.with_columns([
         normalizar_expresiones_pl(pl.col("nombre_comite")).alias("nombre_comite_normalizado"),
         pl.col("tipo_comite")
-            .replace(TIPO_COMITE_MAPPING, default=pl.col("tipo_comite"))
+            .replace_strict(TIPO_COMITE_MAPPING, default=pl.col("tipo_comite"))
             .alias("tipo_comite_std")
     ])
     
@@ -248,6 +257,93 @@ def process_cargo_eleccion_popular(dip_data: pl.DataFrame) -> Dict:
     
     return result
 
+def process_deputy_profile(dip_id: int, dip_data: pl.DataFrame) -> Dict:
+    """Procesa el perfil completo de un diputado"""
+    profile = {"dip_id": dip_id}
+    
+    # Escolaridad
+    escolaridad = dip_data.filter(pl.col("tipo_actividad_std") == "escolaridad")
+    profile["escolaridad"] = 1 if len(escolaridad) > 0 else 0
+    for idx in range(len(escolaridad)):
+        profile[f"escolaridad_{idx + 1}"] = safe_get_value(escolaridad, "descripcion", idx)
+        profile[f"escolaridad_institucion_{idx + 1}"] = safe_get_value(escolaridad, "detalle", idx)
+    
+    # Experiencia Política
+    exp_politica = dip_data.filter(pl.col("tipo_actividad_std") == "exp_politica")
+    profile["exp_politica"] = 1 if len(exp_politica) > 0 else 0
+    for idx in range(len(exp_politica)):
+        profile[f"exp_politica_{idx + 1}"] = safe_get_value(exp_politica, "descripcion", idx)
+        profile[f"exp_politica_periodo_{idx + 1}"] = safe_get_value(exp_politica, "periodo", idx)
+    
+    # Experiencia Laboral Privada
+    exp_privada = dip_data.filter(pl.col("tipo_actividad_std") == "exp_laboral_privada")
+    profile["exp_laboral_privada"] = 1 if len(exp_privada) > 0 else 0
+    for idx in range(len(exp_privada)):
+        profile[f"exp_laboral_privada_{idx + 1}"] = safe_get_value(exp_privada, "descripcion", idx)
+    
+    # Experiencia Legislativa Previa
+    exp_leg = dip_data.filter(pl.col("tipo_actividad_std") == "exp_leg_previa")
+    profile["exp_leg_previa"] = 1 if len(exp_leg) > 0 else 0
+    for idx in range(len(exp_leg)):
+        profile[f"exp_leg_previa_{idx + 1}"] = safe_get_value(exp_leg, "descripcion", idx)
+        profile[f"exp_leg_previa_periodo_{idx + 1}"] = safe_get_value(exp_leg, "periodo", idx)
+    
+    # Administración Pública Federal
+    exp_apf = dip_data.filter(pl.col("tipo_actividad_std") == "exp_apf")
+    profile["exp_apf"] = 1 if len(exp_apf) > 0 else 0
+    for idx in range(len(exp_apf)):
+        profile[f"exp_apf_{idx + 1}"] = safe_get_value(exp_apf, "descripcion", idx)
+        profile[f"exp_apf_periodo_{idx + 1}"] = safe_get_value(exp_apf, "periodo", idx)
+    
+    # Administración Pública Local
+    exp_aplocal = dip_data.filter(pl.col("tipo_actividad_std") == "exp_aplocal")
+    profile["exp_aplocal"] = 1 if len(exp_aplocal) > 0 else 0
+    for idx in range(len(exp_aplocal)):
+        profile[f"exp_aplocal_{idx + 1}"] = safe_get_value(exp_aplocal, "descripcion", idx)
+        profile[f"exp_aplocal_periodo_{idx + 1}"] = safe_get_value(exp_aplocal, "periodo", idx)
+    
+    # Cargos Legislativos Previos
+    cargos_leg = dip_data.filter(pl.col("tipo_actividad_std") == "cargos_legislativos_previa")
+    profile["cargos_legislativos_previa"] = 1 if len(cargos_leg) > 0 else 0
+    for idx in range(len(cargos_leg)):
+        profile[f"cargo_legislativo_{idx + 1}"] = safe_get_value(cargos_leg, "descripcion", idx)
+        profile[f"cargo_legislativo_periodo_{idx + 1}"] = safe_get_value(cargos_leg, "periodo", idx)
+    
+    # Cargos de Elección Popular (usar la función ya definida)
+    profile.update(process_cargo_eleccion_popular(dip_data))
+    
+    # Asociaciones
+    asociaciones = dip_data.filter(pl.col("tipo_actividad_std") == "exp_asociaciones")
+    profile["exp_asociaciones"] = 1 if len(asociaciones) > 0 else 0
+    for idx in range(len(asociaciones)):
+        profile[f"asociacion_{idx + 1}"] = safe_get_value(asociaciones, "descripcion", idx)
+    
+    # Experiencia Docente
+    exp_docente = dip_data.filter(pl.col("tipo_actividad_std") == "exp_docente")
+    profile["exp_docente"] = 1 if len(exp_docente) > 0 else 0
+    for idx in range(len(exp_docente)):
+        profile[f"exp_docente_{idx + 1}"] = safe_get_value(exp_docente, "descripcion", idx)
+        profile[f"exp_docente_institucion_{idx + 1}"] = safe_get_value(exp_docente, "detalle", idx)
+    
+    # Publicaciones
+    publicaciones = dip_data.filter(pl.col("tipo_actividad_std") == "publicaciones")
+    profile["publicaciones"] = 1 if len(publicaciones) > 0 else 0
+    for idx in range(len(publicaciones)):
+        profile[f"publicacion_{idx + 1}"] = safe_get_value(publicaciones, "descripcion", idx)
+    
+    # Experiencia Empresarial
+    exp_empresarial = dip_data.filter(pl.col("tipo_actividad_std") == "exp_empresarial")
+    profile["exp_empresarial"] = 1 if len(exp_empresarial) > 0 else 0
+    for idx in range(len(exp_empresarial)):
+        profile[f"exp_empresarial_{idx + 1}"] = safe_get_value(exp_empresarial, "descripcion", idx)
+    
+    # Logros Deportivos
+    logros_dep = dip_data.filter(pl.col("tipo_actividad_std") == "logros_deportivos")
+    profile["logros_deportivos"] = 1 if len(logros_dep) > 0 else 0
+    for idx in range(len(logros_dep)):
+        profile[f"logro_deportivo_{idx + 1}"] = safe_get_value(logros_dep, "descripcion", idx)
+    
+    return profile
 
 def process_sheet3(df: pl.DataFrame) -> pl.DataFrame:
     """Procesa Sheet3: perfiles y experiencia de diputados"""
@@ -259,7 +355,7 @@ def process_sheet3(df: pl.DataFrame) -> pl.DataFrame:
     
     df = df.with_columns([
         pl.col("tipo")
-            .replace(TIPO_ACTIVIDAD_MAPPING, default=pl.col("tipo"))
+            .replace_strict(TIPO_ACTIVIDAD_MAPPING, default=pl.col("tipo"), return_dtype=pl.Utf8)
             .alias("tipo_actividad_std")
     ])
     
@@ -276,6 +372,67 @@ def process_sheet3(df: pl.DataFrame) -> pl.DataFrame:
 
 
 # ==================== PIPELINE PRINCIPAL ====================
+
+def merge_dataframes(
+    df_sheet1: pl.DataFrame,
+    df_sheet2: pl.DataFrame,
+    df_sheet3: pl.DataFrame
+) -> pl.DataFrame:
+    """Integra los tres dataframes procesados"""
+    logger.info("Integrando dataframes...")
+    
+    # Comenzar con Sheet1 (información básica)
+    df_final = df_sheet1
+    
+    # Unir con Sheet2 (comités) si no está vacío
+    if not df_sheet2.is_empty() and "dip_id" in df_sheet2.columns:
+        df_final = df_final.join(df_sheet2, on="dip_id", how="left")
+        logger.info(f"✓ Sheet2 integrado")
+    else:
+        logger.warning("Sheet2 vacío o sin columna dip_id, se omite integración")
+    
+    # Unir con Sheet3 (perfiles) si no está vacío
+    if not df_sheet3.is_empty() and "dip_id" in df_sheet3.columns:
+        df_final = df_final.join(df_sheet3, on="dip_id", how="left")
+        logger.info(f"✓ Sheet3 integrado")
+    else:
+        logger.warning("Sheet3 vacío o sin columna dip_id, se omite integración")
+    
+    logger.info(f"✓ Integración completa: {len(df_final)} filas, {len(df_final.columns)} columnas")
+    return df_final
+
+def reorder_columns(df: pl.DataFrame) -> pl.DataFrame:
+    """Reordena las columnas para mejor legibilidad"""
+    logger.info("Reordenando columnas...")
+    
+    # Definir orden preferido de columnas principales
+    priority_cols = [
+        "dip_id",
+        "nombre_completo",
+        "partido_diputado",
+        "tipo_eleccion",
+        "entidad",
+        "distrito",
+        "cabecera",
+        "circunscripcion",
+        "fecha_nacimiento",
+        "suplente",
+        "legislatura_activo",
+        "total_comites",
+    ]
+    
+    # Columnas que existen en el dataframe
+    existing_priority = [col for col in priority_cols if col in df.columns]
+    
+    # Columnas restantes (en orden alfabético)
+    remaining_cols = sorted([col for col in df.columns if col not in existing_priority])
+    
+    # Orden final
+    final_order = existing_priority + remaining_cols
+    
+    logger.info(f"✓ Columnas reordenadas")
+    return df.select(final_order)
+
 
 def run_pipeline(config: PipelineConfig) -> pl.DataFrame:
     """Ejecuta el pipeline completo de procesamiento"""
@@ -326,5 +483,23 @@ def run_pipeline(config: PipelineConfig) -> pl.DataFrame:
 # ==================== MAIN ====================
 
 if __name__ == "__main__":
-    config = PipelineConfig.default()
+    # Opción 1: Usar configuración por defecto (con auto-detección)
+    try:
+        config = PipelineConfig.default()
+    except FileNotFoundError as e:
+        logger.error(f"Error de configuración: {e}")
+        # Opción 2: Usar rutas manuales si falla la auto-detección
+        config = PipelineConfig(
+            input_file=Path(r"C:\Users\zigma\Projects\CongresoProject\data\raw\LXI.xlsx"),
+            output_file=Path(r"C:\Users\zigma\Projects\CongresoProject\data\processed\LXI_processed.parquet"),
+            partido_mapping=PARTIDO_MAPPING)
+    
+    # Verificar que el archivo existe antes de procesar
+    if not config.input_file.exists():
+        logger.error(f"❌ Archivo no encontrado: {config.input_file}")
+        logger.info("Verifica que la ruta sea correcta y que el archivo exista.")
+        exit(1)
+    
+    # Ejecutar pipeline
     df_result = run_pipeline(config)
+
