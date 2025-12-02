@@ -34,11 +34,11 @@ class PipelineConfig:
 # ==================== CARGAR DATOS DE FUENTE EXTRAIDA ====================
 
 
-def load_excel_sheet(file_path: Path, sheet_name: str) -> pl.DataFrame:
+def load_excel_sheet(input_file: Path, sheet_name: str) -> pl.DataFrame:
     """Carga una hoja de excel conforme a patrón establecido"""
-    print(f"Loading file: {input_file}...")
-    print(f"Loading sheet: {sheet_name}...")
-    return pl.read_excel(file_path, sheet_name=sheet_name)
+    print(f"Cargando archivo: {input_file}...")
+    print(f"Cargando hoja: {sheet_name}...")
+    return pl.read_excel(input_file, sheet_name=sheet_name)
 
 
 # ==================== PROCESAMIENTO SHEET 1 ====================
@@ -255,7 +255,7 @@ def process_sheet2(df: pl.DataFrame) -> pl.DataFrame:
 # ==================== PROCESAMIENTO SHEET3 ====================
 
 # Mapeo de actividades
-actividades_mapping = {
+tipo_actividad_mapping = {
     "ESCOLARIDAD": "escolaridad",
     "TRAYECTORIA POLÍTICA": "exp_politica",
     "INICIATIVA PRIVADA": "exp_laboral_privada",
@@ -271,16 +271,6 @@ actividades_mapping = {
     "LOGROS DEPORTIVOS MÁS DESTACADOS": "logros_deportivos",
 }
 
-# Standarizar los valores de la variable tipo del Sheet3
-df = df.with_columns(
-    [
-        pl.col("tipo")
-        .replace(tipo_comite_mapping, default=pl.col("tipo"))
-        .alias("tipo_actividad_std")
-    ]
-)
-
-
 def safe_get_value(df: pl.DataFrame, column: str, idx: int) -> str:
     """Safely extract value from dataframe"""
     value = df[column][idx] if df[column][idx] is not None else ""
@@ -289,7 +279,7 @@ def safe_get_value(df: pl.DataFrame, column: str, idx: int) -> str:
 
 def process_actividad_empresarial(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de tipo exp_empresarial"""
-    actividad_emp = dip_data.filter(pl.col("tipo") == "exp_empresarial")
+    actividad_emp = dip_data.filter(pl.col("tipo_actividad_std") == "exp_empresarial")
     result = {}
 
     for idx in range(len(actividad_emp)):
@@ -305,7 +295,7 @@ def process_actividad_empresarial(dip_data: pl.DataFrame) -> Dict:
 
 def process_actividad_docente(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de actividad docente"""
-    actividad_doc = dip_data.filter(pl.col("tipo") == "exp_docente")
+    actividad_doc = dip_data.filter(pl.col("tipo_actividad_std") == "exp_docente")
     has_docente = False
 
     if len(actividad_doc) > 0 and "actividad" in actividad_doc.columns:
@@ -316,7 +306,7 @@ def process_actividad_docente(dip_data: pl.DataFrame) -> Dict:
 
 def process_experiencia_apf(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de experiencia en administracion publica federal"""
-    exp_apf = dip_data.filter(pl.col("tipo") == "exp_apf")
+    exp_apf = dip_data.filter(pl.col("tipo_actividad_std") == "exp_apf")
     result = {"experiencia_apf": 1 if len(exp_apf) > 0 else 0}
 
     for idx in range(len(exp_apf)):
@@ -329,7 +319,7 @@ def process_experiencia_apf(dip_data: pl.DataFrame) -> Dict:
 
 def process_experiencia_aplocal(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de experiencia en admin publica local (estatal o municipal)"""
-    exp_aplocal = dip_data.filter(pl.col("tipo") == "exp_aplocal")
+    exp_aplocal = dip_data.filter(pl.col("tipo_actividad_std") == "exp_aplocal")
     result = {"experiencia_aplocal": 1 if len(exp_aplocal) > 0 else 0}
 
     for idx in range(len(exp_aplocal)):
@@ -342,7 +332,7 @@ def process_experiencia_aplocal(dip_data: pl.DataFrame) -> Dict:
 
 def process_asociaciones(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de actividad en asociaciones de la soc civil"""
-    asociaciones = dip_data.filter(pl.col("tipo") == "exp_asociaciones")
+    asociaciones = dip_data.filter(pl.col("tipo_actividad_std") == "exp_asociaciones")
     result = {"asociaciones": 1 if len(asociaciones) > 0 else 0}
 
     for idx in range(len(asociaciones)):
@@ -362,7 +352,7 @@ def process_asociaciones(dip_data: pl.DataFrame) -> Dict:
 
 def process_cargo_eleccion_popular(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de info de cargos de eleccion popular previos el inicio de la actual legislatura del diputado"""
-    cargo_elec = dip_data.filter(pl.col("tipo") == "cargos_electos_previos")
+    cargo_elec = dip_data.filter(pl.col("tip_actividad_std") == "cargos_electos_previos")
     result = {"cargo_eleccion_popular": 1 if len(cargo_elec) > 0 else 0}
 
     for idx in range(len(cargo_elec)):
@@ -383,7 +373,7 @@ def process_cargo_eleccion_popular(dip_data: pl.DataFrame) -> Dict:
 
 def process_experiencia_legislativa(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de experiencia legislativa previa de un diputado"""
-    exp_leg = dip_data.filter(pl.col("tipo") == "cargos_legislativos_previa")
+    exp_leg = dip_data.filter(pl.col("tipo_actividad_std") == "cargos_legislativos_previa")
     result = {"experiencia_legislativa": 1 if len(exp_leg) > 0 else 0}
 
     for idx in range(len(exp_leg)):
@@ -401,7 +391,7 @@ def process_experiencia_legislativa(dip_data: pl.DataFrame) -> Dict:
 
 def process_escolaridad(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de informacion de escolaridad del diputado"""
-    escolaridad = dip_data.filter(pl.col("tipo") == "escolaridad")
+    escolaridad = dip_data.filter(pl.col("tipo_actividad_std") == "escolaridad")
     result = {}
 
     for idx in range(len(escolaridad)):
@@ -426,7 +416,7 @@ def process_escolaridad(dip_data: pl.DataFrame) -> Dict:
 
 def process_experiencia_legislativa_previa(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de experiencia legislativa previa antes de iniciar la actual legislatura"""
-    exp_leg_prev = dip_data.filter(pl.col("tipo") == "exp_leg_previa")
+    exp_leg_prev = dip_data.filter(pl.col("tipo_actividad_std") == "exp_leg_previa")
     result = {}
 
     for idx in range(len(exp_leg_prev)):
@@ -451,7 +441,7 @@ def process_experiencia_legislativa_previa(dip_data: pl.DataFrame) -> Dict:
 
 def process_empleo_privado(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de empleo en el sector privado previo al iniico de la legislatura"""
-    emp_priv = dip_data.filter(pl.col("tipo") == "exp_laboral_privada")
+    emp_priv = dip_data.filter(pl.col("tipo_actividad_std") == "exp_laboral_privada")
     result = {"empleo_privado": 1 if len(emp_priv) > 0 else 0}
 
     for idx in range(len(emp_priv)):
@@ -472,13 +462,13 @@ def process_empleo_privado(dip_data: pl.DataFrame) -> Dict:
 
 def process_deportista(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de informacion de diputados con experiencia deportiva profesional probada"""
-    deportista = dip_data.filter(pl.col("tipo") == "logros_deportivos")
+    deportista = dip_data.filter(pl.col("tipo_actividad_std") == "logros_deportivos")
     return {"deportista_altorend": 1 if len(deportista) > 0 else 0}
 
 
 def process_experiencia_politica(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de experiencia política de diputados antes de comenzar la legislatura"""
-    exp_pol = dip_data.filter(pl.col("tipo") == "exp_politica")
+    exp_pol = dip_data.filter(pl.col("tipo_actividad_std") == "exp_politica")
     result = {"experiencia_pol": 1 if len(exp_pol) > 0 else 0}
 
     for idx in range(len(exp_pol)):
@@ -518,6 +508,13 @@ def process_deputy_profile(dip_id: int, dip_data: pl.DataFrame) -> Dict:
 def process_sheet3(df: pl.DataFrame) -> pl.DataFrame:
     """Procesando Sheet3: Perfiles de diputados y experiencia"""
     print("Procesando Sheet3...")
+
+    df = df.with_columns(
+    [
+        pl.col("tipo")
+        .replace(tipo_actividad_mapping, default=pl.col("tipo"))
+        .alias("tipo_actividad_std")
+    ])
 
     results = []
     for dip_id in df["dip_id"].unique().sort():
