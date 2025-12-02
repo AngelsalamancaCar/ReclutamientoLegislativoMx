@@ -6,7 +6,7 @@ Data Pipeline para el procesamiento de información de diputaciones y datos de p
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List
-
+import re
 import polars as pl
 
 
@@ -22,10 +22,10 @@ class PipelineConfig:
     @classmethod
     def default(cls):
         return cls(
-            input_file=Path(
+            input_file = Path(
                 r"C:\Users\zigma\Projects\CongresoProject\data\raw\LXI.xlsx"
             ),
-            output_file=Path(
+            output_file = Path(
                 r"C:\Users\zigma\Projects\CongresoProject\data\processed\LXI_processed.parquet"
             ),
         )
@@ -704,7 +704,7 @@ def reorder_columns(df: pl.DataFrame) -> pl.DataFrame:
 
 def run_pipeline(config: PipelineConfig):
     """Ejecucion del data pipeline"""
-    print(f"Iniciando data pipeline...")
+    print("Iniciando data pipeline...")
     print(f"Input: {config.input_file}")
     print(f"Output: {config.output_file}")
 
@@ -732,7 +732,7 @@ def run_pipeline(config: PipelineConfig):
     df_final.write_parquet(config.output_file)
 
     print(f"\n{'=' * 60}")
-    print(f"Procesamiento completo!")
+    print("Procesamiento completo!")
     print(f"Output guardado en : {config.output_file}")
     print(f"Total filas: {len(df_final)}")
     print(f"Total columnas: {len(df_final.columns)}")
