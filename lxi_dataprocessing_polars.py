@@ -3,10 +3,9 @@ Data Pipeline para el procesamiento de información de diputaciones y datos de p
 """
 
 # Cargar librerias requeridas para procesamiento de datos
-import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import dict, List, Optional
 
 import polars as pl
 
@@ -176,59 +175,59 @@ tipo_comite_mapping = {
 def process_sheet2(df: pl.DataFrame) -> pl.DataFrame:
     """
     Process Sheet2: Restructure committee assignments for profile analysis
-    
+
     This function transforms the data so each deputy (dip_id) has one row
     with columns indicating their committee memberships across all types.
     """
     print("Procesando Sheet2...")
-    
+
     # Normalize committee names for consistency
     df = df.with_columns(
         normalizar_expresionespl(pl.col("nombre_comite")).alias(
             "nombre_comite_normalizado"
         )
     )
-    
+
     # Standardize tipo_comite values
     df = df.with_columns(
         pl.col("tipo_comite")
         .replace(tipo_comite_mapping, default=pl.col("tipo_comite"))
         .alias("tipo_comite_std")
     )
-    
+
     # Group by deputy and committee type to collect all committees
     df_grouped = df.group_by(["dip_id", "tipo_comite_std"]).agg([
         pl.col("nombre_comite_normalizado").alias("comites"),
         pl.col("nombre_comite_normalizado").count().alias("num_comites")
     ])
-    
+
     # Create a wide format where each committee type becomes columns
     result_rows = []
-    
+
     for dip_id in df["dip_id"].unique().sort():
         # Get all committee memberships for this deputy
         deputy_data = df_grouped.filter(pl.col("dip_id") == dip_id)
-        
+
         # Initialize the row for this deputy
         row = {"dip_id": dip_id}
-        
+
         # Track total committees across all types
         total_committees = 0
-        
+
         # Process each committee type
         for tipo in ["ordinaria", "comite", "especial", "bicamaral"]:
             # Filter for this specific committee type
             tipo_data = deputy_data.filter(pl.col("tipo_comite_std") == tipo)
-            
+
             if len(tipo_data) > 0:
                 # Get the list of committees
                 comites_list = tipo_data["comites"][0]
                 num_comites = tipo_data["num_comites"][0]
-                
+
                 # Add count column
                 row[f"num_{tipo}"] = num_comites
                 total_committees += num_comites
-                
+
                 # Add individual committee names as separate columns
                 for idx, comite in enumerate(comites_list, start=1):
                     if comite is not None and comite != "":
@@ -236,17 +235,17 @@ def process_sheet2(df: pl.DataFrame) -> pl.DataFrame:
             else:
                 # Deputy doesn't belong to this committee type
                 row[f"num_{tipo}"] = 0
-        
+
         # Add total count
         row["total_comites"] = total_committees
-        
+
         result_rows.append(row)
-    
+
     # Convert to DataFrame
     result_df = pl.DataFrame(result_rows)
-    
+
     print(f"Procesados {len(result_rows)} diputados")
-    
+
     return result_df
 
 
