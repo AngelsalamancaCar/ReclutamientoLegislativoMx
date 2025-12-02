@@ -5,10 +5,10 @@ Data Pipeline para el procesamiento de información de diputaciones y datos de p
 # Cargar librerias requeridas para procesamiento de datos
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 import re
 import polars as pl
-
+import logging
 
 # Establecer clase para data pipeline
 @dataclass
@@ -30,6 +30,9 @@ class PipelineConfig:
             ),
         )
 
+# Configurar logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # ==================== CARGAR DATOS DE FUENTE EXTRAIDA ====================
 
@@ -131,7 +134,7 @@ entidad_mapping = {
 }
 
 
-def procesar_sheet1(df: pl.DataFrame, partido_mapping: Dict[str, str]) -> pl.DataFrame:
+def process_sheet1(df: pl.DataFrame, partido_mapping: Dict[str, str]) -> pl.DataFrame:
     """Procesar Sheet1: Limpiar nombres de partidos con mapa"""
     print("Procesando Sheet1...")
     return df.with_columns(
@@ -352,7 +355,7 @@ def process_asociaciones(dip_data: pl.DataFrame) -> Dict:
 
 def process_cargo_eleccion_popular(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de info de cargos de eleccion popular previos el inicio de la actual legislatura del diputado"""
-    cargo_elec = dip_data.filter(pl.col("tip_actividad_std") == "cargos_electos_previos")
+    cargo_elec = dip_data.filter(pl.col("tipo_actividad_std") == "cargos_electos_previos")
     result = {"cargo_eleccion_popular": 1 if len(cargo_elec) > 0 else 0}
 
     for idx in range(len(cargo_elec)):
@@ -371,18 +374,18 @@ def process_cargo_eleccion_popular(dip_data: pl.DataFrame) -> Dict:
     return result
 
 
-def process_experiencia_legislativa(dip_data: pl.DataFrame) -> Dict:
+def process_cargos_legislativos(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de experiencia legislativa previa de un diputado"""
     exp_leg = dip_data.filter(pl.col("tipo_actividad_std") == "cargos_legislativos_previa")
     result = {"experiencia_legislativa": 1 if len(exp_leg) > 0 else 0}
 
     for idx in range(len(exp_leg)):
-        result[f"experiencia_legislativa_detalle_{idx + 1}"] = (
+        result[f"cargos_legislativos_detalle_{idx + 1}"] = (
             exp_leg["descripcion"][idx]
             if exp_leg["descripcion"][idx] is not None
             else ""
         )
-        result[f"experiencia_legislativa_legislatura_{idx + 1}"] = (
+        result[f"cargos_legislativos_legislatura_{idx + 1}"] = (
             exp_leg["detalle"][idx] if exp_leg["detalle"][idx] is not None else ""
         )
 
@@ -495,7 +498,7 @@ def process_deputy_profile(dip_id: int, dip_data: pl.DataFrame) -> Dict:
     result.update(process_experiencia_aplocal(dip_data))
     result.update(process_asociaciones(dip_data))
     result.update(process_cargo_eleccion_popular(dip_data))
-    result.update(process_experiencia_legislativa(dip_data))
+    result.update(process_cargos_legislativos(dip_data))
     result.update(process_escolaridad(dip_data))
     result.update(process_experiencia_legislativa_previa(dip_data))
     result.update(process_empleo_privado(dip_data))
@@ -711,7 +714,7 @@ def run_pipeline(config: PipelineConfig):
     df_sheet3 = load_excel_sheet(config.input_file, "Sheet3")
 
     # Procesar cada hoja del doc de excel fuente
-    df_sheet1_processed = procesar_sheet1(df_sheet1, config.partido_mapping)
+    df_sheet1_processed = process_sheet1(df_sheet1, config.partido_mapping)
     df_sheet2_processed = process_sheet2(df_sheet2)
     df_sheet3_processed = process_sheet3(df_sheet3)
 
