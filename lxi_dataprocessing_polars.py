@@ -5,7 +5,7 @@ Data Pipeline para el procesamiento de información de diputaciones y datos de p
 # Cargar librerias requeridas para procesamiento de datos
 from dataclasses import dataclass
 from pathlib import Path
-from typing import dict, List, Optional
+from typing import Dict, List
 
 import polars as pl
 
@@ -172,6 +172,7 @@ tipo_comite_mapping = {
     "": "",
 }
 
+
 def process_sheet2(df: pl.DataFrame) -> pl.DataFrame:
     """
     Process Sheet2: Restructure committee assignments for profile analysis
@@ -196,10 +197,12 @@ def process_sheet2(df: pl.DataFrame) -> pl.DataFrame:
     )
 
     # Group by deputy and committee type to collect all committees
-    df_grouped = df.group_by(["dip_id", "tipo_comite_std"]).agg([
-        pl.col("nombre_comite_normalizado").alias("comites"),
-        pl.col("nombre_comite_normalizado").count().alias("num_comites")
-    ])
+    df_grouped = df.group_by(["dip_id", "tipo_comite_std"]).agg(
+        [
+            pl.col("nombre_comite_normalizado").alias("comites"),
+            pl.col("nombre_comite_normalizado").count().alias("num_comites"),
+        ]
+    )
 
     # Create a wide format where each committee type becomes columns
     result_rows = []
@@ -251,7 +254,7 @@ def process_sheet2(df: pl.DataFrame) -> pl.DataFrame:
 
 # ==================== PROCESAMIENTO SHEET3 ====================
 
-#Mapeo de actividades
+# Mapeo de actividades
 actividades_mapping = {
     "ESCOLARIDAD": "escolaridad",
     "TRAYECTORIA POLÍTICA": "exp_politica",
@@ -270,9 +273,13 @@ actividades_mapping = {
 
 # Standarizar los valores de la variable tipo del Sheet3
 df = df.with_columns(
-   pl.col("tipo")
-   .replace(tipo_comite_mapping, default=pl.col("tipo"))
-   .alias("tipo_actividad_std")
+    [
+        pl.col("tipo")
+        .replace(tipo_comite_mapping, default=pl.col("tipo"))
+        .alias("tipo_actividad_std")
+    ]
+)
+
 
 def safe_get_value(df: pl.DataFrame, column: str, idx: int) -> str:
     """Safely extract value from dataframe"""
@@ -376,9 +383,7 @@ def process_cargo_eleccion_popular(dip_data: pl.DataFrame) -> Dict:
 
 def process_experiencia_legislativa(dip_data: pl.DataFrame) -> Dict:
     """Procesamiento de experiencia legislativa previa de un diputado"""
-    exp_leg = dip_data.filter(
-        pl.col("tipo") == "cargos_legislativos_previa"
-    )
+    exp_leg = dip_data.filter(pl.col("tipo") == "cargos_legislativos_previa")
     result = {"experiencia_legislativa": 1 if len(exp_leg) > 0 else 0}
 
     for idx in range(len(exp_leg)):
