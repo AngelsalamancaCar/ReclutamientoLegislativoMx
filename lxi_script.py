@@ -10,6 +10,7 @@ import logging
 import polars as pl
 import os
 import re
+from pipeline_config import PipelineConfig
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -52,6 +53,7 @@ TIPO_ELECCION_MAPPING = {
     "Mayoría Relativa": "mr",  # Con acento
     "Representacion Proporcional": "rp",
     "Representación Proporcional": "rp",  # Con acento
+    "Representación proporcional": "rp",
 }
 
 
@@ -59,10 +61,21 @@ PARTIDO_MAPPING = {
     "PRI01": "PRI",
     "PAN": "PAN",
     "PRD01": "PRD",
-    "LOGVRD": "PVerde",
+    "LOGVRD": "VERDE",
     "LOGPT": "PT",
     "PANAL": "PANAL",
-    "LOGO_MOVIMIENTO_CIUDADANO": "MovCiudadano",
+    "LOGO_MOVIMIENTO_CIUDADANO": "MC",
+    "CONVERGENCIA": "CONVERGENCIA",
+    "PASC": "PASC",
+    "LOGOMORENA": "MORENA",
+    "LOGO_SP": "SP",
+    "LOGO_PT": "PT",
+    "ENCUENTRO": "ENCUENTRO",
+    "PRI": "PRI",
+    "MORENA": "MORENA",
+    "VERDE": "PVerde",
+    "PT": "PT",
+    "MC": "MC"
 }
 
 ENTIDAD_MAPPING = {
@@ -168,9 +181,14 @@ def normalizar_expresiones_pl(expr):
 def safe_get_value(df: pl.DataFrame, column: str, idx: int, default: str = "") -> str:
     """Extrae valor de forma segura del dataframe"""
     try:
-        value = df[column][idx]
+        # Verificar que la columna existe
+        if column not in df.columns:
+            return default
+        
+        # Obtener el valor usando slice
+        value = df.slice(idx, 1)[column][0]
         return str(value) if value is not None else default
-    except (IndexError, KeyError):
+    except (IndexError, pl.exceptions.ColumnNotFoundError):
         return default
 
 
@@ -198,13 +216,30 @@ def process_sheet1(df: pl.DataFrame, partido_mapping: Dict[str, str]) -> pl.Data
         logger.warning("Sheet1 está vacío")
         return df
     
+    # Asegurar que la columna sea string para manipulación
+    df = df.with_columns(
+        pl.col("fecha_nacimiento").cast(pl.String)
+    )
+    
+    # Parsear fecha con manejo de múltiples formatos
+    fecha_expr = (
+        pl.col("fecha_nacimiento")
+        .str.strptime(pl.Date, format="%d-%m-%Y", strict=False)
+        .fill_null(
+            pl.col("fecha_nacimiento")
+            .str.strptime(pl.Date, format="%Y-%m-%d", strict=False)
+        )
+        .fill_null(
+            pl.col("fecha_nacimiento")
+            .str.strptime(pl.Date, format="%d/%m/%Y", strict=False)
+        )
+    )
+    
     return df.with_columns([
         pl.col("partido_diputado").replace_strict(partido_mapping, default=pl.col("partido_diputado")),
         pl.col("tipo_eleccion").replace_strict(TIPO_ELECCION_MAPPING, default=pl.col("tipo_eleccion")),
         pl.col("entidad").replace_strict(ENTIDAD_MAPPING, default=pl.col("entidad")),
-        pl.col("fecha_nacimiento")
-            .str.strptime(pl.Date, format="%d-%m-%Y", strict=False)
-            .alias("fecha_nacimiento"),
+        fecha_expr.alias("fecha_nacimiento"),
         normalizar_expresiones_pl(pl.col("nombre_completo")).alias("nombre_completo"),
         normalizar_expresiones_pl(pl.col("suplente")).alias("suplente"),
         normalizar_expresiones_pl(pl.col("cabecera")).alias("cabecera"),
@@ -408,14 +443,14 @@ def merge_dataframes(
     # Unir con Sheet2 (comités) si no está vacío
     if not df_sheet2.is_empty() and "dip_id" in df_sheet2.columns:
         df_final = df_final.join(df_sheet2, on="dip_id", how="left")
-        logger.info(f"✓ Sheet2 integrado")
+        logger.info("✓ Sheet2 integrado")
     else:
         logger.warning("Sheet2 vacío o sin columna dip_id, se omite integración")
     
     # Unir con Sheet3 (perfiles) si no está vacío
     if not df_sheet3.is_empty() and "dip_id" in df_sheet3.columns:
         df_final = df_final.join(df_sheet3, on="dip_id", how="left")
-        logger.info(f"✓ Sheet3 integrado")
+        logger.info("✓ Sheet3 integrado")
     else:
         logger.warning("Sheet3 vacío o sin columna dip_id, se omite integración")
     
@@ -451,7 +486,7 @@ def reorder_columns(df: pl.DataFrame) -> pl.DataFrame:
     # Orden final
     final_order = existing_priority + remaining_cols
     
-    logger.info(f"✓ Columnas reordenadas")
+    logger.info("✓ Columnas reordenadas")
     return df.select(final_order)
 
 
